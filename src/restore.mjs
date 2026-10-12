@@ -5,6 +5,7 @@ import { requireThat, ns, same, inside, noLinksInPath, seal } from './common.mjs
 import { inventory, indexRows, difference, exact, requireNoLinks } from './inventory.mjs';
 import { putObjects } from './snapshot.mjs';
 import { journal } from './journal.mjs';
+import { requireSpace, treeBytes, metadataBytes } from './space.mjs';
 
 // Recovery only accepts bytes already observed/approved in this transaction.
 // Unknown edits are never overwritten, even on a path touched by a patch.
@@ -15,6 +16,10 @@ export function restoreKnown(root, snapshotDir, baseline, allowedStates, runDir)
   const all = new Set([...actual.keys(), ...states.flatMap(s => [...s.keys()])]);
   for (const p of all) requireThat(states.some(s => same(s.get(p), actual.get(p))), 'RECOVERY_REQUIRED', 'Unknown repository drift; preserve it and reconcile before restore');
   const changed = difference(current, baseline);
+  requireSpace([
+    { path: runDir, bytes: treeBytes(current.filter(r => changed.includes(r.path)), true) + metadataBytes(current), purpose: 'preserve recovery evidence' },
+    { path: root, bytes: treeBytes(baseline.filter(r => changed.includes(r.path))), purpose: 'restore original files' }
+  ]);
   const recoveryDir = path.join(runDir, 'recovery-' + crypto.randomUUID());
   fs.mkdirSync(ns(recoveryDir));
   putObjects(root, current.filter(r => r.kind === 'file' && changed.includes(r.path)), path.join(recoveryDir, 'objects'));

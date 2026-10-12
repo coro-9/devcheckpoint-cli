@@ -6,16 +6,22 @@ import { run, succeeded } from './process.mjs';
 
 export const toolRoot = fileURLToPath(new URL('../', import.meta.url));
 export function configuration(file) {
-  return checkConfig(file ? readJson(file) : { version: 1, commands: [] });
+  if (!file) return checkConfig({ version: 1, commands: [] });
+  let value;
+  try { value = readJson(file); } catch (e) {
+    if (e instanceof SyntaxError) throw new CheckpointError('USAGE', 'Malformed validation JSON; correct the configuration before retrying');
+    throw e;
+  }
+  return checkConfig(value);
 }
 export function checkConfig(c) {
   requireThat(c && c.version === 1 && Array.isArray(c.commands) && Object.keys(c).every(k => ['version', 'commands'].includes(k)), 'USAGE', 'Expected version:1 and commands array');
   const names = new Set();
   for (const command of c.commands) {
-    requireThat(command && /^[a-zA-Z0-9_-]+$/.test(command.name) && !names.has(command.name) && ['command', 'tests'].includes(command.kind)
+    requireThat(command && typeof command.name === 'string' && /^[a-zA-Z0-9_-]+$/.test(command.name) && !names.has(command.name) && ['command', 'tests'].includes(command.kind)
       && Array.isArray(command.argv) && command.argv.length > 0 && command.argv.every(a => typeof a === 'string' && !a.includes('\0'))
-      && command.argv[0].length > 0 && (!command.timeoutMs || (Number.isInteger(command.timeoutMs) && command.timeoutMs > 0 && command.timeoutMs <= 3600000))
-      && Object.keys(command).every(k => ['name', 'kind', 'argv', 'timeoutMs'].includes(k)), 'USAGE', 'Invalid or duplicate validation command');
+      && command.argv[0].length > 0 && (!Object.hasOwn(command, 'timeoutMs') || (Number.isInteger(command.timeoutMs) && command.timeoutMs > 0 && command.timeoutMs <= 3600000))
+      && Object.keys(command).every(k => ['name', 'kind', 'argv', 'timeoutMs'].includes(k)), 'USAGE', 'Invalid or duplicate validation command; use a unique string name, argv array, and an omitted timeoutMs or integer from 1 to 3600000');
     names.add(command.name);
   }
   return c;

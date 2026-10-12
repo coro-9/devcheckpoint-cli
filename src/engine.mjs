@@ -2,14 +2,15 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
-import { requireThat, ns, outside, exists, sha, digest, seal, unseal, same, CheckpointError } from './common.mjs';
+import { requireThat, ns, outside, exists, sha, digest, seal, unseal, same, noLinksInPath, CheckpointError } from './common.mjs';
 import { inventory, exact, difference, indexRows, requireNoLinks } from './inventory.mjs';
 import { repository, patchPaths } from './repository.mjs';
-import { git } from './process.mjs';
-import { backup, verifyBackup, reconstruct } from './snapshot.mjs';
+import { git, privateDirectory } from './process.mjs';
+import { backup, verifyBackup, reconstruct, copyWorkingTree } from './snapshot.mjs';
 import { configuration, checkConfig, validate } from './validation.mjs';
 import { locked, journal, state } from './journal.mjs';
 import { restoreKnown } from './restore.mjs';
+import { requireSpace, treeBytes, patchBytes, metadataBytes, reserveBytes } from './space.mjs';
 
 function unchanged(repo, m) {
   requireThat(path.resolve(repo) === m.repo, 'INTEGRITY', 'Snapshot belongs to another repository');
@@ -57,18 +58,31 @@ export function plan(options) {
     entries: before.length, backupBytes: before.reduce((n, r) => n + (r.bytes ?? 0), 0), commands: config.commands,
     risks: ['Stop editors, watchers and background writers before transactions.', 'Validation commands run with your privileges and may use the network.', 'This is a content snapshot, not an ACL/timestamp/system backup.'], applicable: false };
   if (before.some(r => r.kind === 'link')) return { ...output, risks: [...output.risks, 'Links can be inventoried/backed up but rehearsal/apply are unsupported.'] };
-  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'devcheckpoint-plan-'));
+  const lightweight = options.patches.length === 1;
+  const estimate = (lightweight ? 0 : treeBytes(before)) + patchBytes(options.patches) + metadataBytes(before, options.patches.length);
+  requireSpace([{ path: os.tmpdir(), bytes: estimate, purpose: lightweight ? 'read-only patch inspection' : 'ordered patch reconstruction' }]);
+  const temp = path.join(os.tmpdir(), 'devcheckpoint-plan-' + crypto.randomUUID()); privateDirectory(temp);
   let completed = false;
   try {
-    const dest = path.join(temp, 'backup'); backup(repo, dest); const m = verifyBackup(dest);
-    const work = path.join(dest, 'workspace'); reconstruct(dest, m, work);
-    const copied = copyPatches(options.patches, dest);
-    const p = patchesInto(work, copied, dest, m.entries, options.progress ?? (() => {}));
+    const copied = copyPatches(options.patches, temp);
+    let paths;
+    if (lightweight) {
+      const file = path.join(temp, copied[0].name);
+      requireThat(sha(fs.readFileSync(ns(file))) === copied[0].sha256, 'INTEGRITY', 'Patch hash mismatch');
+      paths = patchPaths(repo, file, path.join(temp, 'patch-1-paths'));
+      git(repo, ['apply', '--check', '--whitespace=warn', '--', file], { log: path.join(temp, 'patch-1-check') });
+    } else {
+      const work = path.join(temp, 'workspace'); copyWorkingTree(repo, before, work);
+      paths = patchesInto(work, copied, temp, before, options.progress ?? (() => {})).expectedPaths;
+    }
     exact(inventory(repo), before);
+    requireThat(same(repository(repo), identity), 'DRIFT', 'Git identity changed during plan');
     completed = true;
-    return { ...output, applicable: true, expectedChangedFiles: p.expectedPaths, patchSha256: copied.map(p => p.sha256) };
+    return { ...output, applicable: true, expectedChangedFiles: paths, patchSha256: copied.map(p => p.sha256),
+      verificationScope: lightweight ? 'read-only Git applicability check; exact postimage verification requires rehearsal' : 'ordered patches applied to one complete disposable copy; validation and restoration require rehearsal',
+      estimatedTemporaryBytes: estimate + reserveBytes };
   } catch (e) {
-    throw new CheckpointError(e.code ?? 'ERROR', 'Preflight failed; target was not modified and private diagnostics were retained', { evidence: path.join(temp, 'backup') });
+    throw new CheckpointError(e.code ?? 'ERROR', 'Preflight failed; target was not modified and private diagnostics were retained', { evidence: temp });
   } finally {
     // Only the random private directory created by this invocation is disposable.
     requireThat(path.dirname(temp) === os.tmpdir() && path.basename(temp).startsWith('devcheckpoint-plan-'), 'INTEGRITY', 'Invalid temporary root');
@@ -84,6 +98,8 @@ export function rehearse(options) {
   return locked(options.repo, options.recoverLock, () => {
     const m = verifyBackup(dir); requireNoLinks(m.entries); unchanged(options.repo, m);
     requireThat(!exists(path.join(dir, 'rehearsal.json')), 'USAGE', 'A rehearsal is already sealed; use a new snapshot for new changes');
+    requireSpace([{ path: dir, bytes: treeBytes(m.entries) * 2 + patchBytes(options.patches) + metadataBytes(m.entries, options.patches.length) + config.commands.length * 32 * 1024 * 1024,
+      purpose: 'rehearsal workspace, patch growth allowance, logs and recovery' }]);
     const runDir = path.join(dir, 'rehearsal-' + crypto.randomUUID()); fs.mkdirSync(ns(runDir));
     const work = path.join(runDir, 'workspace'), patches = copyPatches(options.patches, runDir);
     reconstruct(dir, m, work); const initial = inventory(work);
@@ -96,6 +112,11 @@ export function rehearse(options) {
       exact(inventory(work), post);
       restoreKnown(work, dir, m.entries, application.stages, runDir);
       unchanged(options.repo, m);
+      // Only a successfully restored, byte-verified disposable workspace is removed.
+      requireThat(path.resolve(work) === path.join(path.resolve(runDir), 'workspace') && path.dirname(runDir) === dir, 'INTEGRITY', 'Invalid disposable workspace');
+      exact(inventory(work), m.entries);
+      fs.rmSync(ns(work), { recursive: true });
+      journal(runDir, 'RESTORED_WORKSPACE_REMOVED');
       const receipt = { version: 1, status: 'REHEARSAL_PASS', snapshotSha256: digest(m), run: path.basename(runDir), patches,
         config, expectedPaths: application.expectedPaths, stages: application.stages, results,
         validationScope: config.commands.some(c => c.kind === 'tests') ? 'test evidence checked' : 'no tests configured; patch verification only',
@@ -113,14 +134,16 @@ export function rehearse(options) {
     }
   });
 }
-function receipt(dir, m) {
+export function receipt(dir, m) {
   const r = unseal(path.join(dir, 'rehearsal.json'));
   requireThat(r.version === 1 && r.status === 'REHEARSAL_PASS' && r.restored === true && r.snapshotSha256 === digest(m)
     && /^rehearsal-[a-f0-9-]+$/.test(r.run) && Array.isArray(r.stages) && r.stages.length === r.patches.length && r.stages.length > 0,
   'INTEGRITY', 'Invalid rehearsal receipt');
   checkConfig(r.config); for (const stage of r.stages) indexRows(stage);
   for (const [i, p] of r.patches.entries()) {
-    requireThat(p.name === `patch-${i + 1}.patch` && sha(fs.readFileSync(ns(path.join(dir, r.run, p.name)))) === p.sha256, 'INTEGRITY', 'Rehearsed patch was modified');
+    requireThat(p.name === `patch-${i + 1}.patch`, 'INTEGRITY', 'Invalid rehearsed patch name');
+    const file = noLinksInPath(path.join(dir, r.run, p.name));
+    requireThat(fs.lstatSync(ns(file)).isFile() && sha(fs.readFileSync(ns(file))) === p.sha256, 'INTEGRITY', 'Rehearsed patch was modified');
   }
   return r;
 }
@@ -132,6 +155,13 @@ export function apply(options) {
     requireThat(r.config.commands.length === 0 || options.approveCommands, 'APPROVAL', 'Validation execution requires --approve-commands');
     unchanged(options.repo, m);
     requireThat(!exists(path.join(dir, 'transaction.json')), 'USAGE', 'This snapshot already has a transaction; restore it or use a new snapshot');
+    const changedRows = rows => { const changed = new Set(difference(m.entries, rows)); return rows.filter(r => changed.has(r.path)); };
+    const recovery = Math.max(...r.stages.map(rows => treeBytes(changedRows(rows), true)));
+    const postimages = Math.max(...r.stages.map(rows => treeBytes(changedRows(rows))));
+    requireSpace([
+      { path: dir, bytes: recovery + metadataBytes(m.entries, r.stages.length) + r.config.commands.length * 32 * 1024 * 1024, purpose: 'apply evidence and rollback preservation' },
+      { path: m.repo, bytes: postimages + treeBytes(m.entries.filter(row => r.expectedPaths.includes(row.path))), purpose: 'patch postimages and original-file restoration' }
+    ]);
     const runDir = path.join(dir, 'apply-' + crypto.randomUUID()); fs.mkdirSync(ns(runDir));
     const tx = { version: 1, repo: m.repo, run: path.basename(runDir), snapshotSha256: digest(m), phase: 'APPLYING' };
     seal(path.join(dir, 'transaction.json'), tx); state(runDir, tx);

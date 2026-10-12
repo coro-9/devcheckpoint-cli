@@ -33,6 +33,7 @@ Windows, Node.js 24 and Git for Windows versions are recorded in `docs/verificat
 - Known failed-attempt bytes are preserved before per-entry restoration. No recursive owner-directory deletion or wholesale overwrite is performed.
 - Interruption between completed patch steps is recoverable through a deliberate restore if all entries match approved states. Interrupted file writes, interrupted restore, torn state/sidecar writes, full disks or external modifications can require manual reconciliation. Original snapshot objects remain available. Never edit manifests merely to force a match.
 - Filesystem checks and cooperative locks are not atomic filesystem transactions. Power-loss durability beyond available file fsync/rename guarantees is not promised.
+- Free-space checks are conservative estimates, not reservations. They include complete-copy or changed-file demand, metadata/log allowances and 64 MiB additional headroom per volume. Rehearsal also budgets one tree's worth of growth/recovery allowance. Extremely expanding patches, external programs, concurrent disk consumers and arbitrary validator output cannot be bounded in advance. A later out-of-space error remains a failure; if recovery cannot safely finish, reconciliation is required. No existing snapshot or failure evidence is deleted to make room.
 
 ## Publication
 

@@ -1,0 +1,93 @@
+name: Windows verification
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      # Official refs verified against their repositories; full SHAs are immutable pins.
+      # https://docs.github.com/en/actions/reference/security/secure-use
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      # https://github.com/actions/setup-node/tree/v6.3.0
+      # https://nodejs.org/en/download/archive/v24
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Tool versions and prerequisites
+        run: |
+          node --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          git --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $PSVersionTable.PSVersion.ToString()
+          node bin/devcheckpoint.mjs doctor
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      # Tests create fresh, complete synthetic repositories. The shallow CI checkout
+      # is never a transaction target; no repository safety rule is relaxed for CI.
+      - name: Tests
+        run: npm test
+      - name: Syntax and source checks
+        run: npm run check
+      - name: Synthetic transaction and recovery
+        run: npm run example
+      - name: Package dry run
+        run: npm pack --dry-run --json
+      - name: Verified ZIP
+        run: npm run zip
+      - name: Extracted archive smoke
+        run: |
+          $version = (Get-Content -LiteralPath package.json -Raw | ConvertFrom-Json).version
+          $destination = Join-Path $env:RUNNER_TEMP ('DevCheckpoint archive smoke ' + [guid]::NewGuid().ToString('N'))
+          Expand-Archive -LiteralPath "artifacts/devcheckpoint-$version.zip" -DestinationPath $destination
+          $root = Join-Path $destination "devcheckpoint-$version"
+          $manifest = Get-Content -LiteralPath "artifacts/PUBLIC_MANIFEST-$version.json" -Raw | ConvertFrom-Json
+          foreach ($entry in $manifest.files) {
+            $file = Join-Path $root $entry.path
+            if ((Get-Item -LiteralPath $file).Length -ne $entry.bytes) { throw 'Extracted size mismatch' }
+            if ((Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant() -ne $entry.sha256) { throw 'Extracted hash mismatch' }
+          }
+          if (@(Get-ChildItem -LiteralPath $root -File -Recurse -Force).Count -ne $manifest.files.Count) { throw 'Extracted inventory mismatch' }
+          Push-Location -LiteralPath $root
+          try {
+            node bin/devcheckpoint.mjs --help
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            node bin/devcheckpoint.mjs --version
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            node bin/devcheckpoint.mjs doctor
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            npm run check
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            $demo = @(node examples/demo.mjs)
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            $demo | Write-Output
+            $prefix = 'Synthetic example and private evidence retained at: '
+            $locations = @($demo | Where-Object { $_.StartsWith($prefix) })
+            if ($locations.Count -ne 1) { throw 'Missing synthetic example location' }
+            $demoRoot = $locations[0].Substring($prefix.Length)
+            node bin/devcheckpoint.mjs status --backup-dir (Join-Path $demoRoot 'recovery')
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            node bin/devcheckpoint.mjs status --backup-dir (Join-Path $demoRoot 'recovery') --verify --repo (Join-Path $demoRoot 'example-app')
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          } finally {
+            Pop-Location
+          }

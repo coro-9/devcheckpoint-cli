@@ -3,7 +3,7 @@
 The CLI is an explicit state machine over ordinary Git and filesystem operations. There is no service, database, model, account or proprietary runtime.
 
 ```text
-plan (owner read-only; private temporary reconstruction)
+plan (owner read-only; one patch: Git check; ordered series: one disposable copy)
   -> backup (complete inventory + content objects + sealed manifest)
   -> rehearse (reconstruct -> ordered patches -> validation -> exact restoration)
   -> apply [human confirmation] (same preimage -> same patches -> same hashes -> validation)
@@ -19,6 +19,7 @@ plan (owner read-only; private temporary reconstruction)
 | `inventory.mjs`, `windows.*` | Exact entry identities, bounded-buffer hashing, drift detection, Windows unsupported-metadata gates |
 | `repository.mjs`, `process.mjs` | Canonical Git options, repository support boundary, argv execution, private output capture |
 | `snapshot.mjs` | Complete content snapshot, immutable hash-addressed objects, reconstruction |
+| `space.mjs` | Conservative pre-operation estimates, available-space checks grouped by volume |
 | `validation.mjs`, `node-reporter.mjs` | Approved commands and explicit test evidence |
 | `journal.mjs` | Cooperative repository lock, durable events and state |
 | `restore.mjs` | Known-state, per-entry restoration with preserved attempted bytes |
@@ -39,6 +40,8 @@ Git runs with optional locks off, long paths on, autocrlf off, fsmonitor off and
 `git apply --numstat -z` identifies patch paths. Link/submodule/rename/copy patches and protected/device-named targets are rejected. Each ordered patch uses `--check`, then apply with warnings retained. Exit code, signal and spawn error determine process success. Whole-tree comparison checks that only declared patch paths/new parent directories changed and `.git` stayed identical.
 
 Rehearsal seals every intermediate whole-tree postimage and command configuration. Owner adoption requires the exact snapshot preimage and compares every step to its rehearsed postimage. No test success can override a hash mismatch.
+
+A single-patch plan uses only `git apply --check`, with copied-patch hash and unchanged-owner inventory checks. It reports that limited scope; complete postimage, validation and restoration checks remain mandatory in rehearsal. Multi-patch plans copy the complete working tree once and verify it directly, avoiding a redundant temporary snapshot object store. A successful rehearsal's workspace is removed only after exact baseline restoration and another inventory verification. Its durable evidence and recovery objects remain; failed workspaces are not cleaned up.
 
 ## Validation and recovery
 

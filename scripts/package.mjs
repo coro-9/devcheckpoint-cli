@@ -7,7 +7,7 @@ import crypto from 'node:crypto';
 
 const root = fileURLToPath(new URL('../', import.meta.url)), pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json')));
 const dirs = ['bin', 'src', 'test', 'examples', 'docs', 'scripts'];
-const files = ['package.json', '.gitignore', 'README.md', 'ARCHITECTURE.md', 'SECURITY.md', 'LIMITATIONS.md', 'CONTRIBUTING.md', 'LICENSE'];
+const files = ['package.json', '.gitignore', 'README.md', 'ARCHITECTURE.md', 'SECURITY.md', 'LIMITATIONS.md', 'CONTRIBUTING.md', 'LICENSE', 'CHANGELOG.md', '.github/workflows/windows.yml'];
 function walk(relative) {
   for (const name of fs.readdirSync(path.join(root, relative)).sort()) {
     const key = relative + '/' + name, stat = fs.lstatSync(path.join(root, key)); assert(!stat.isSymbolicLink());
@@ -24,5 +24,5 @@ const r = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Execut
 assert.equal(r.status, 0, r.stderr); const verification = JSON.parse(r.stdout);
 assert.equal(verification.entries, entries.length); assert.equal(verification.verified, true);
 const result = { version: pkg.version, files: entries, zipBytes: fs.statSync(zip).size, zipSha256: crypto.createHash('sha256').update(fs.readFileSync(zip)).digest('hex'), readBackVerified: true };
-fs.writeFileSync(path.join(out, 'PUBLIC_MANIFEST.json'), JSON.stringify(result, null, 2) + '\n', { flag: 'wx' });
+fs.writeFileSync(path.join(out, `PUBLIC_MANIFEST-${pkg.version}.json`), JSON.stringify(result, null, 2) + '\n', { flag: 'wx' });
 console.log(JSON.stringify({ status: 'ZIP_PASS', zip, files: entries.length, bytes: result.zipBytes, sha256: result.zipSha256 }, null, 2));

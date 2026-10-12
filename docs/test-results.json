@@ -1,16 +1,22 @@
 {
+  "version": "0.1.2",
   "date": "2026-10-12",
-  "platform": "Windows 11 x64 / local NTFS",
+  "platform": "Windows 10.0.26200 x64 / local NTFS",
   "node": "v24.13.0",
-  "git": "2.55.0.windows.5",
+  "git": "git version 2.55.0.windows.5",
+  "powershell": "5.1.26100.9444",
   "exitCode": 0,
   "counts": {
-    "tests": 21,
-    "pass": 21,
+    "tests": 39,
+    "pass": 39,
     "fail": 0,
     "cancelled": 0,
     "skipped": 0,
     "todo": 0
   },
-  "independentTapBodyCount": 21
+  "independentTapBodyCount": 39,
+  "baselineTests": 25,
+  "newTests": 14,
+  "focusedStorageRegressions": 4,
+  "hostedCI": "NOT_RUN"
 }

@@ -1,5 +1,23 @@
 # Verification record
 
+The 0.1.0 baseline below is retained. The focused 0.1.1 changes and measured storage comparison are documented in [disk-usage-0.1.1.md](disk-usage-0.1.1.md); current automated results are in [test-results.json](test-results.json).
+
+## 0.1.2 bounded usability release
+
+Locally executed on Windows / Node v24.13.0, Git 2.55.0.windows.5, Windows PowerShell 5.1.26100.9444. The complete suite passed **39/39 tests**, with zero failures, skipped, cancelled or todo tests. TAP summary counters agree with 39 successful test records and process exit 0. This includes the existing 25 tests (all four storage regressions) and 14 focused CLI, timeout and read-only status tests. Syntax checks passed for 26 modules. Package dry-run and the complete synthetic example passed, including intentional apply validation failure and exact baseline recovery.
+
+The new tests cover strict supplied timeouts and string names, a finite real timeout, help/version/doctor outside Git, safe input errors, Node requirement checks, metadata-only status without object/live-checkout reads, explicit deep verification, lifecycle states, drift, corrupt/missing seals, pending/incomplete evidence and rejection of a linked patch path before content reads. The copied-patch reader was strengthened after a bounded source review found its link check occurred too late. One initial status test failed because the test itself supplied a repository during metadata-only inspection; its input was corrected. Raw local failures remain private.
+
+Windows CI is configured with pinned official actions, but **hosted CI has not run**. The release archive and extracted execution receive a separate local delivery record after sealing; these source-suite results alone do not claim an extracted or hosted run. No Linux/macOS qualification or publication is claimed.
+
+## 0.1.1 focused update
+
+The complete suite passed **25/25 tests**, with zero failed, skipped, cancelled or todo tests and process exit 0. This includes all 21 original tests and four focused storage regressions. TAP totals agree with 25 successful test records. Syntax/package-entry checks passed for 21 JavaScript modules. The original 0.1.0 ZIP hash remains unchanged.
+
+The storage comparison used the same synthetic repository and matched every baseline entry hash. Single-patch plan temporary file bytes fell by 99.99%; ordered-plan temporary bytes by 50.01%; retained snapshot/rehearsal bytes by 49.92%. The complete backup remained byte-size identical. These are file-length measurements, not allocated-cluster or free-volume measurements. Full figures, measurement scope, retained evidence and capacity-check limitations are in the linked storage note.
+
+## 0.1.0 baseline
+
 Executed locally on **2026-10-12**. This record describes observed results, not planned checks.
 
 | Environment | Observed version |
