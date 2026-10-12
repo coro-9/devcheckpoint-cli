@@ -13,4 +13,4 @@ DevCheckpoint is a local safety utility, not a sandbox or adversarial backup sys
 - Locks coordinate this tool only. The tool cannot stop an editor, antivirus, service or another agent from writing. No race-free guarantee is made against malicious concurrent filesystem replacement.
 - A backup is not a substitute for independent, tested disaster recovery. Keep a second recovery copy for valuable work.
 
-For a security report, do not post snapshots, private paths, credentials or raw logs. Share a minimal synthetic reproduction privately with the repository maintainer. No public maintainer endpoint is configured in this pre-publication project.
+For a security report, do not post snapshots, private paths, credentials or raw logs. Share a minimal synthetic reproduction privately with the repository maintainer. No dedicated private security-reporting endpoint is currently announced. Agree on a private channel with the maintainer before disclosing sensitive details; do not use public issues for secrets or exploit details.

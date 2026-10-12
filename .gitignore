@@ -11,3 +11,11 @@ coverage/
 .env.*
 backups/
 snapshots/
+
+# Local authentication data and private process output
+credentials.json
+auth.json
+tokens.json
+session.json
+*.stdout
+*.stderr

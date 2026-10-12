@@ -1,16 +1,48 @@
 # DevCheckpoint
 
+Verify complete Git snapshots, rehearse proposed patches, and recover safely when exact repository checks permit it.
+
+[![MIT license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Windows qualified baseline](https://img.shields.io/badge/qualified-Windows-0078D4.svg)](docs/verification.md)
+[![Node.js 24+](https://img.shields.io/badge/Node.js-24%2B-339933.svg)](package.json)
+[![Windows CI](https://github.com/coro-9/devcheckpoint-cli/actions/workflows/windows.yml/badge.svg?branch=master)](https://github.com/coro-9/devcheckpoint-cli/actions/workflows/windows.yml)
+[![v0.1.2 Beta](https://img.shields.io/badge/release-v0.1.2%20Beta-orange.svg)](https://github.com/coro-9/devcheckpoint-cli/releases/tag/v0.1.2)
+
+[Quick Start](#windows-quick-start--no-installation) · [Workflow](#one-complete-workflow) · [Benchmarks](#measured-storage-savings) · [Security](SECURITY.md) · [Arabic](docs/README.ar.md) · [Contributing](CONTRIBUTING.md)
+
 **Verify a snapshot. Rehearse a patch. Apply deliberately. Refuse destructive recovery.**
 
 DevCheckpoint is a small, dependency-free Node.js CLI for local Git repositories. It preserves current working files—including staged, modified, untracked and ignored content—then checks a proposed patch series in a disposable reconstruction before allowing an explicitly confirmed application.
 
 It works independently of coding agents, accounts and APIs. Codex or another agent can invoke the same CLI through a shell. It does not modify Codex itself.
 
+## Key features
+
+- Complete local snapshots include Git history and staged, modified, untracked and ignored files.
+- Ordered patch rehearsal verifies exact preimages, postimages and restoration in an independent working copy.
+- Separate command approval and apply/restore confirmation keep execution deliberate.
+- Drift detection stops recovery before overwriting unknown edits.
+- Read-only doctor and checkpoint status explain prerequisites and recorded evidence.
+- Lightweight single-patch planning and successful-workspace cleanup reduce temporary storage.
+
+```mermaid
+flowchart LR
+  P[Reviewed patch] --> L[Plan]
+  L --> B[Complete backup]
+  B --> R[Approved rehearsal]
+  R --> H[Separate apply approval]
+  H --> A[Apply and validate]
+  A --> S[Inspect status]
+  S --> U[Deliberate restore if needed]
+```
+
+> Validation commands run with your privileges and are **not sandboxed**. Backups may contain secrets. Stop other repository writers and read the [security boundaries](SECURITY.md) before using a real project.
+
 ## Status and support
 
-Version 0.1.2 is a conservative MVP. Verified environments and actual test results are recorded in [verification.md](docs/verification.md). Windows remains the qualified baseline; Linux/macOS are **not qualified** by this delivery. The included Windows CI workflow has not yet run on GitHub.
+Version 0.1.2 is a conservative MVP. Verified environments and actual test results are recorded in [verification.md](docs/verification.md). Windows remains the qualified baseline; Linux/macOS are **not qualified** by this delivery. The hosted Windows CI workflow has passed; inspect [the actual successful run](https://github.com/coro-9/devcheckpoint-cli/actions/runs/38318913967).
 
-Supported transactions: self-contained, non-bare Git repositories with an existing commit; ordered text/binary patches adding, modifying or deleting regular files. Repositories must be idle. No linked worktrees, submodules, external Git object stores, hard links, alternate streams, EFS, or special files. Link objects can be backed up as metadata without traversal, but rehearsal/apply refuse repositories containing links. See [LIMITATIONS.md](LIMITATIONS.md).
+Supported transactions: self-contained, non-bare Git repositories with an existing commit; ordered text/binary patches adding, modifying or deleting regular files. Repositories must be idle. Supply canonical full repository paths; Windows 8.3 aliases are rejected when they differ from Git's resolved root. No linked worktrees, submodules, external Git object stores, hard links, alternate streams, EFS, or special files. Link objects can be backed up as metadata without traversal, but rehearsal/apply refuse repositories containing links. See [LIMITATIONS.md](LIMITATIONS.md).
 
 ## Windows Quick Start — no installation
 
@@ -117,9 +149,29 @@ Exit codes: `0` success, `1` unexpected failure, `2` usage, `3` approval missing
 | Drift or ambiguous restore | Preserve newer work and reconcile against private evidence; never force an overwrite or edit a manifest to pass. |
 | Exit 10 / disk capacity changes | Provide sufficient space on every involved volume and retry only after inspecting state. Estimates reserve nothing; never delete recovery evidence merely to continue. |
 
+## Measured storage savings
+
+These storage improvements were introduced in **0.1.1** and preserved in **0.1.2**. The same synthetic project contained 33 regular files totaling 8,421,113 bytes.
+
+| Operation | 0.1.0 file bytes | 0.1.1 file bytes | Savings |
+|---|---:|---:|---:|
+| Single-patch plan temporary files | 16,852,200 | 1,212 | 99.99% |
+| Ordered two-patch plan temporary files | 16,854,062 | 8,425,097 | 50.01% |
+| Retained backup + successful rehearsal | 16,869,969 | 8,448,923 | 49.92% |
+
+These are regular-file byte measurements from one synthetic project. They do not measure runtime, allocated disk clusters or guaranteed savings on other projects. Successful plan files are temporary; the rehearsal figure measures retained storage. Complete backups and failure evidence remain necessary. Read the [measurement method and limits](docs/disk-usage-0.1.1.md).
+
+## Use with Codex
+
+From the unpacked tool directory, give your agent an instruction such as:
+
+> Use DevCheckpoint to inspect my reviewed patch against the unchanged target. Show the configured argv, then wait for my approval before executing validators. Make a complete external backup and rehearse. Report the actual results and stop for separate approval before apply or restore. Use status for inspection; never treat a passing check as permission.
+
+The [short Codex guide](docs/codex.md) includes an optional instruction for your existing `AGENTS.md`. DevCheckpoint requires no coding-agent account or API, and never edits agent instructions automatically.
+
 ## Windows CI
 
-[The workflow](.github/workflows/windows.yml) uses Windows and Node 24, records tool versions, and runs tests, syntax checks, the synthetic example, package dry-run, ZIP verification and extracted smoke. It has read-only repository permissions, pinned official actions, no persisted checkout credentials, dependencies, publishing or deployments. See the workflow's official-source links. Local checks do not establish a hosted CI PASS; that requires a real GitHub run.
+[The workflow](.github/workflows/windows.yml) uses Windows and Node 24, records tool versions, and runs tests, syntax checks, the synthetic example, package dry-run, ZIP verification and extracted smoke. It has read-only repository permissions, pinned official actions, no persisted checkout credentials, dependencies, publishing or deployments. See the workflow's official-source links. The [hosted verification run](https://github.com/coro-9/devcheckpoint-cli/actions/runs/38318913967) passed tests, syntax checks, synthetic recovery, packaging and extracted smoke on Windows Server 2025 / Node.js 24.21.0. The runner uses its canonical temporary directory; strict repository checks remain unchanged.
 
 ## Review and contribute
 
@@ -127,5 +179,9 @@ Exit codes: `0` success, `1` unexpected failure, `2` usage, `3` approval missing
 - [Arabic guide](docs/README.ar.md), [Codex instructions](docs/codex.md)
 - [Synthetic demo](examples/demo.mjs), [contributing](CONTRIBUTING.md)
 - [Changelog](CHANGELOG.md)
+
+Report reproducible tool problems through [GitHub Issues](https://github.com/coro-9/devcheckpoint-cli/issues). Include tool versions and a minimal synthetic example; keep snapshots, credentials and private logs out of public reports. For contributions, follow [CONTRIBUTING.md](CONTRIBUTING.md). Security-report guidance is in [SECURITY.md](SECURITY.md).
+
+The [v0.1.2 tag](https://github.com/coro-9/devcheckpoint-cli/tree/v0.1.2) and release ZIP preserve the exact verified source. This default-branch README includes subsequent publication presentation updates.
 
 All project code is newly authored generic implementation under MIT. The design applies established snapshot, transaction, hashing and rollback techniques; it does not claim to invent them. No private application source, credentials, native assets or historical campaign data are included.
