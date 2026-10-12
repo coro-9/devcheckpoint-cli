@@ -1,0 +1,17 @@
+{
+  "name": "devcheckpoint",
+  "version": "0.1.0",
+  "description": "Verified local Git snapshots, patch rehearsals and drift-aware recovery",
+  "type": "module",
+  "license": "MIT",
+  "engines": { "node": ">=24" },
+  "bin": { "devcheckpoint": "bin/devcheckpoint.mjs" },
+  "scripts": {
+    "test": "node --test --test-concurrency=1 --test-reporter=tap test/*.test.mjs",
+    "check": "node scripts/check.mjs",
+    "example": "node examples/demo.mjs",
+    "zip": "node scripts/package.mjs"
+  },
+  "files": ["bin", "src", "test", "scripts", "docs", "examples", "README.md", "ARCHITECTURE.md", "SECURITY.md", "LIMITATIONS.md", "LICENSE", "CONTRIBUTING.md"],
+  "keywords": ["git", "backup", "patch", "rehearsal", "rollback"]
+}

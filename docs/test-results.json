@@ -1,0 +1,16 @@
+{
+  "date": "2026-10-12",
+  "platform": "Windows 11 x64 / local NTFS",
+  "node": "v24.13.0",
+  "git": "2.55.0.windows.5",
+  "exitCode": 0,
+  "counts": {
+    "tests": 21,
+    "pass": 21,
+    "fail": 0,
+    "cancelled": 0,
+    "skipped": 0,
+    "todo": 0
+  },
+  "independentTapBodyCount": 21
+}

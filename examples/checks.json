@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "commands": [
+    { "name": "syntax", "kind": "command", "argv": ["node", "--check", "app.mjs"] },
+    { "name": "unit", "kind": "tests", "argv": ["node", "--test", "--test-reporter={reporter}", "app.test.mjs"], "timeoutMs": 120000 }
+  ]
+}
