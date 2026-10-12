@@ -16,6 +16,11 @@ jobs:
   verify:
     runs-on: windows-latest
     timeout-minutes: 30
+    # Use the runner's canonical temporary directory instead of Windows 8.3
+    # profile aliases. Repository root identity checks remain strict.
+    env:
+      TEMP: ${{ runner.temp }}
+      TMP: ${{ runner.temp }}
     defaults:
       run:
         shell: pwsh
@@ -40,6 +45,8 @@ jobs:
           git --version
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $PSVersionTable.PSVersion.ToString()
+          node -e "console.log('Synthetic temporary root: ' + require('node:os').tmpdir())"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node bin/devcheckpoint.mjs doctor
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       # Tests create fresh, complete synthetic repositories. The shallow CI checkout
